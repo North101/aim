@@ -3,14 +3,17 @@ import 'package:alarm/model/alarm_settings.dart';
 import 'package:flutter/material.dart';
 
 class AlarmPage extends StatelessWidget {
-  const AlarmPage({super.key, required this.settings});
+  const AlarmPage({
+    super.key,
+    required this.settings,
+  });
 
   final AlarmSettings settings;
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      onPopInvoked: (didPop) => Alarm.stop(settings.id),
+      onPopInvokedWithResult: (didPop, result) => Alarm.stop(settings.id),
       child: Dialog(
         child: InkWell(
           onTap: () => Navigator.pop(context),

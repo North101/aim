@@ -1,5 +1,4 @@
-import 'dart:math';
-
+import '/views/rank_text.dart';
 import 'package:collection/collection.dart';
 import 'package:data_table_2/data_table_2.dart';
 import 'package:flutter/material.dart';
@@ -8,60 +7,41 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '/models.dart';
 import '/providers.dart';
 import '/utils.dart';
+import '/views/async_error.dart';
+import '/views/async_loading.dart';
 import '/views/score_text.dart';
 
-const columnMargin = 18;
-
-const scoreStyle = TextStyle(
-  fontWeight: FontWeight.bold,
-  fontSize: 16,
-);
-
-Size textSize(String text, {TextStyle? style}) {
-  return (TextPainter(
-    text: TextSpan(text: text, style: style),
-    maxLines: 1,
-    textDirection: TextDirection.ltr,
-  )..layout())
-      .size;
-}
-
-Size scoreSize(int score, String negSign) => textSize(
-      // Display score with 1 decimal point
-      scoreFormat(score, negSign),
-      style: scoreStyle,
-    );
+const columnSpacing = 16.0;
 
 final scoreWidthProvider = StreamProvider.autoDispose((ref) async* {
-  final negSign = ref.watch(negSignProvider);
   final playerScores = await ref.watch(playerScoreListProvider.future);
+  if (playerScores.isEmpty) {
+    yield null;
+    return;
+  }
+
+  final negSign = ref.watch(negSignProvider);
   final maxRankWidth = playerScores
-      .map((playerScore) => playerScore.rank)
-      .map((rank) => textSize(rank).width)
+      .map((playerScore) => rankSize(playerScore.rank, playerScore.tied))
       .max;
   final maxNameWidth = playerScores
-      .map((playerScore) => playerScore.name)
-      .map((name) => textSize(name).width)
-      .max;
-  final maxScoreWidth = playerScores
-      .map((playerScore) => playerScore.roundScores.map((e) => e.score))
-      .flattened
-      .map((score) => scoreSize(score, negSign).width)
-      .max;
-  final maxTotalWidth = playerScores
-      .map((playerScore) => playerScore.total)
-      .map((score) => scoreSize(score, negSign).width)
-      .max;
-  final maxPenaltyWidth = playerScores
-      .map((playerScore) => playerScore.penalty)
-      .map((score) => scoreSize(score, negSign).width)
+      .map((playerScore) => playerScore.player.name)
+      .map((name) => textSize(name))
       .max;
 
   yield (
     playerScores: playerScores,
     maxRankWidth: maxRankWidth,
     maxNameWidth: maxNameWidth,
-    maxScoreWidth: max(max(maxScoreWidth, maxTotalWidth), maxPenaltyWidth),
+    maxScoreWidth: [
+      for (final playerScore in playerScores)
+        for (final score in playerScore.scores)
+          scoreSize(score.score.finalScore, negSign),
+      for (final playerScore in playerScores)
+        scoreSize(playerScore.finalScore, negSign),
+      for (final playerScore in playerScores)
+        scoreSize(playerScore.penalites, negSign),
+    ].max,
   );
 });
 
@@ -77,64 +57,69 @@ class ScoreTable extends ConsumerWidget {
     final playerScores = ref.watch(scoreWidthProvider);
     return playerScores.when(
       skipLoadingOnReload: true,
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) =>ErrorScreen(error: error, stackTrace: stackTrace),
+      loading: () => const AsyncLoadingWidget(),
+      error: (error, stackTrace) => AsyncErrorWidget(error, stackTrace),
       data: (playerScores) {
+        if (playerScores == null) {
+          return const Center(child: Text(''));
+        }
+
+        final rounds =
+            playerScores.playerScores.map((e) => e.scores.length).max;
         final selectedScore = playerScores.playerScores.firstWhereOrNull(
-          (e) => e.id == selectedPlayerId,
+          (e) => e.player.id == selectedPlayerId,
         );
-        final int rounds = playerScores.playerScores[0].roundScores.length;
         return DataTable2(
           minWidth: double.infinity,
           fixedTopRows: selectedPlayerId != null ? 2 : 1,
+          columnSpacing: columnSpacing,
           columns: [
             DataColumn2(
               label: const Text('#', maxLines: 1),
               numeric: true,
-              fixedWidth: playerScores.maxRankWidth + columnMargin,
+              fixedWidth: playerScores.maxRankWidth + columnSpacing,
             ),
             DataColumn2(
               label: const Text('Player', maxLines: 1),
-              fixedWidth: playerScores.maxNameWidth + columnMargin,
+              fixedWidth: playerScores.maxNameWidth + columnSpacing,
             ),
             DataColumn2(
               label: const Text('Total', maxLines: 1),
               numeric: true,
-              fixedWidth: playerScores.maxScoreWidth + columnMargin,
+              fixedWidth: playerScores.maxScoreWidth + columnSpacing,
             ),
             for (int i = rounds - 1; i >= 0; i--)
               DataColumn2(
                 label: Text('R${i + 1}', maxLines: 1),
                 numeric: true,
-                fixedWidth: playerScores.maxScoreWidth + columnMargin,
+                fixedWidth: playerScores.maxScoreWidth + columnSpacing,
               ),
             DataColumn2(
               label: const Text('Pen.', maxLines: 1),
               numeric: true,
-              fixedWidth: playerScores.maxScoreWidth + columnMargin,
+              fixedWidth: playerScores.maxScoreWidth + columnSpacing,
             ),
           ],
           rows: [
-            if (selectedScore case PlayerScore score)
+            if (selectedScore case PlayerRankedResults score)
               ScoreRow(
                 selected: true,
                 score: score,
                 rounds: rounds,
-                onTap: () => onTap(context, selectedScore.id),
+                onTap: () => onTap(context, selectedScore.player.id),
                 color: WidgetStateProperty.all<Color>(selectedHighlight),
               ),
             for (final score in playerScores.playerScores)
               ScoreRow(
-                selected: selectedPlayerId == score.id,
+                selected: selectedPlayerId == score.player.id,
                 score: score,
                 rounds: rounds,
-                onTap: () => onTap(context, score.id),
-                color: selectedPlayerId == score.id
+                onTap: () => onTap(context, score.player.id),
+                color: selectedPlayerId == score.player.id
                     ? WidgetStateProperty.all<Color>(selectedHighlight)
                     : null,
               ),
           ],
-          columnSpacing: 10,
         );
       },
     );
@@ -143,28 +128,23 @@ class ScoreTable extends ConsumerWidget {
 
 class ScoreRow extends DataRow2 {
   ScoreRow({
-    required PlayerScore score,
-    required super.onTap,
+    required PlayerRankedResults score,
     required int rounds,
+    required super.onTap,
     super.color,
     super.selected,
   }) : super(cells: [
+          DataCell(RankText(rank: score.rank, tied: score.tied)),
           DataCell(Text(
-            score.rank,
-            maxLines: 1,
-          )),
-          DataCell(Text(
-            score.name,
+            score.player.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           )),
-          DataCell(ScoreText(score.total)),
+          DataCell(ScoreText(score.finalScore)),
           for (int i = rounds - 1; i >= 0; i--)
             DataCell(
-              ScoreText(score.roundScores[i].score),
-              // TODO decide: do we want a user to tap on a single score to go to the whole hanchan score? Maybe in a modal popup?
-              // onTap: () => showHanchanModel(score.id, i),
+              ScoreText(score.scores.elementAtOrNull(i)?.score.finalScore ?? 0),
             ),
-          DataCell(ScoreText(score.penalty)),
+          DataCell(ScoreText(score.penalites)),
         ]);
 }

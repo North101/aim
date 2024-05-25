@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_sticky_header/flutter_sticky_header.dart';
@@ -7,9 +6,11 @@ import 'package:intl/intl.dart';
 import '/models.dart';
 import '/providers.dart';
 import '/utils.dart';
+import 'async_error.dart';
+import 'async_loading.dart';
 
 typedef Round = ({
-  String id,
+  RoundId id,
   String name,
   DateTime start,
   List<RoundTable> tables,
@@ -29,44 +30,36 @@ final filterByPlayerIdProvider = Provider((ref) {
 final roundListProvider = StreamProvider((ref) async* {
   final showAll = ref.watch(showAllProvider);
   final filterByPlayerId = ref.watch(filterByPlayerIdProvider);
-  final roundById = await ref.watch(scheduleProvider.selectAsync(
-    (schedule) => Map.fromEntries(
-      (schedule.rounds.map((e) => MapEntry(e.id, e))),
-    ),
-  ));
-  final playerById = await ref.watch(playerListProvider.selectAsync(
-    (playerList) => Map.fromEntries(
-      playerList.map((e) => MapEntry(e.id, e.name)),
-    ),
-  ));
-
-  final roundList = await ref.watch(seatingProvider.future);
+  final playerMap = await ref.watch(playerMapProvider.future);
+  final roundList = await ref.watch(roundScheduleListProvider.future);
+  final roundTableMap = await ref.watch(roundTableMapProvider.future);
   yield roundList
       .map(
         (round) => (
           id: round.id,
-          name: roundById[round.id]!.name,
-          start: roundById[round.id]!.start,
+          name: round.name,
+          start: round.start,
           tables: [
-            for (final MapEntry(key: tableName, value: playerIds)
-                in round.tables.entries)
-              if (showAll ||
-                  filterByPlayerId == null ||
-                  playerIds.contains(filterByPlayerId))
-                (
-                  name: tableName,
-                  players: {
-                    for (final wind in Wind.values)
-                      wind: PlayerData({
-                        'id': playerIds[wind.index],
-                        'name': playerById[playerIds[wind.index]]!,
-                      }),
-                  },
-                )
+            if (roundTableMap[round.id] case Map<String, List<int>> tables)
+              for (final MapEntry(key: tableName, value: playerIds)
+                  in tables.entries)
+                if (showAll ||
+                    filterByPlayerId == null ||
+                    playerIds.contains(filterByPlayerId))
+                  (
+                    name: tableName,
+                    players: {
+                      for (final wind in Wind.values)
+                        wind: PlayerData(
+                          playerIds[wind.index],
+                          playerMap[playerIds[wind.index]]?.name ?? 'Unknown',
+                        ),
+                    },
+                  ),
           ],
         ),
       )
-      .sortedBy((round) => round.start);
+      .toList();
 }, dependencies: [
   showAllProvider,
   filterByPlayerIdProvider,
@@ -120,8 +113,8 @@ class ScheduleList extends ConsumerWidget {
     final roundList = ref.watch(filteredRoundList(when));
     return roundList.when(
       skipLoadingOnReload: true,
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ErrorScreen(error: error, stackTrace: stackTrace),
+      loading: () => const AsyncLoadingWidget(),
+      error: (error, stackTrace) => AsyncErrorWidget(error, stackTrace),
       data: (roundList) {
         if (roundList.isEmpty) {
           return const Center(child: Text('No seating schedule available'));

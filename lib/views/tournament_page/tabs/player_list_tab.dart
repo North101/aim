@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '/providers.dart';
 import '/utils.dart';
+import '/views/async_error.dart';
+import '/views/async_loading.dart';
+import '/views/rank_text.dart';
 
 final searchProvider = StateProvider((_) => '');
 
@@ -12,10 +15,10 @@ final searchPlayerList = StreamProvider((ref) async* {
   final playerList = await ref.watch(playerScoreListProvider.future);
   yield playerList
       .where(
-        (player) => player.name.toLowerCase().contains(search),
+        (player) => player.player.name.toLowerCase().contains(search),
       )
       .toList()
-      .sortedBy((player) => player.name);
+      .sortedBy((player) => player.player.name);
 });
 
 class Players extends ConsumerStatefulWidget {
@@ -79,8 +82,8 @@ class PlayerList extends ConsumerWidget {
     final playerList = ref.watch(searchPlayerList);
     return playerList.when(
       skipLoadingOnReload: true,
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ErrorScreen(error: error, stackTrace: stackTrace),
+      loading: () => const AsyncLoadingWidget(),
+      error: (error, stackTrace) => AsyncErrorWidget(error, stackTrace),
       data: (playerList) => ListView.builder(
         itemCount: playerList.length,
         itemBuilder: (context, index) => PlayerTile(player: playerList[index]),
@@ -95,12 +98,12 @@ class PlayerTile extends ConsumerWidget {
     required this.player,
   });
 
-  final PlayerScore player;
+  final PlayerRankedResults player;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isSelected = ref.watch(
-      selectedPlayerIdProvider.select((id) => id == player.id),
+      selectedPlayerIdProvider.select((id) => id == player.player.id),
     );
     return ListTile(
       selected: isSelected,
@@ -110,8 +113,8 @@ class PlayerTile extends ConsumerWidget {
         Icons.account_circle,
         color: Colors.green,
       ),
-      title: Text(player.name),
-      subtitle: Text('Rank: ${player.rank}'),
+      title: Text(player.player.name),
+      subtitle: Text('Rank: ${rankText(player.rank, player.tied)}'),
       trailing: IconButton(
         onPressed: () {
           final selectedPlayerIdNotifier =
@@ -119,15 +122,15 @@ class PlayerTile extends ConsumerWidget {
           if (isSelected) {
             selectedPlayerIdNotifier.set(null);
           } else {
-            selectedPlayerIdNotifier.set(player.id);
+            selectedPlayerIdNotifier.set(player.player.id);
           }
         },
         icon: isSelected
             ? const Icon(Icons.favorite)
             : const Icon(Icons.favorite_border),
       ),
-      onTap: () =>
-          Navigator.of(context).pushNamed(ROUTES.player, arguments: player.id),
+      onTap: () => Navigator.of(context)
+          .pushNamed(ROUTES.player, arguments: player.player.id),
     );
   }
 }

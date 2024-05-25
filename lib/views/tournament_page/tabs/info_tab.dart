@@ -4,8 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '/providers.dart';
-import '/utils.dart';
 import '/venue.dart';
+import '/views/async_error.dart';
+import '/views/async_loading.dart';
 
 class TournamentInfo extends ConsumerWidget {
   const TournamentInfo({super.key});
@@ -15,17 +16,20 @@ class TournamentInfo extends ConsumerWidget {
     final tournament = ref.watch(tournamentProvider);
     return tournament.when(
       skipLoadingOnReload: true,
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ErrorScreen(error: error, stackTrace: stackTrace),
+      loading: () => const AsyncLoadingWidget(),
+      error: (error, stackTrace) => AsyncErrorWidget(error, stackTrace),
       data: (tournament) => ListView(
         children: [
           ListTile(
             leading: const Icon(Icons.location_on),
-            title: Text(tournament.address),
-            trailing: IconButton(
-              onPressed: () => openMap(context, tournament.address),
-              icon: const Icon(Icons.open_in_new),
-            ),
+            title: Text(
+                tournament.address.isNotEmpty ? tournament.address : 'Unknown'),
+            trailing: tournament.address.isNotEmpty
+                ? IconButton(
+                    onPressed: () => openMap(context, tournament.address),
+                    icon: const Icon(Icons.open_in_new),
+                  )
+                : null,
             onLongPress: () async {
               await Clipboard.setData(ClipboardData(text: tournament.address));
 
@@ -63,8 +67,8 @@ class ScheduleTable extends ConsumerWidget {
     ));
     return rounds.when(
       skipLoadingOnReload: true,
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ErrorScreen(error: error, stackTrace: stackTrace),
+      loading: () => const AsyncLoadingWidget(),
+      error: (error, stackTrace) => ListTile(title: Text('$error')),
       data: (rounds) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Table(
@@ -93,16 +97,16 @@ class ScheduleTable extends ConsumerWidget {
                 ),
               ),
             ]),
-            for (final schedule in rounds)
+            for (final round in rounds)
               TableRow(children: [
                 Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Text(schedule.name),
+                  child: Text(round.name),
                 ),
                 Padding(
                   padding: const EdgeInsets.all(8),
-                  child: Text(
-                      DateFormat('EEEE d MMMM HH:mm').format(schedule.start)),
+                  child:
+                      Text(DateFormat('EEEE d MMMM HH:mm').format(round.start)),
                 ),
               ]),
           ],

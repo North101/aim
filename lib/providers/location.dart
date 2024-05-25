@@ -2,8 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart';
 
-import 'firestore.dart';
 import '/providers/shared_preferences.dart';
+import 'firestore.dart';
 
 final timezoneProvider = FutureProvider(
   (ref) => FlutterTimezone.getLocalTimezone(),

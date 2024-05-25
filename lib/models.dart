@@ -30,8 +30,7 @@ class TournamentData extends Equatable {
     required this.rules,
   });
 
-  factory TournamentData.fromJson(Map<String, dynamic> data) =>
-      TournamentData(
+  factory TournamentData.fromJson(Map<String, dynamic> data) => TournamentData(
         id: data['id'] as TournamentId,
         name: data['name'] as String,
         address: data['address'] as String,
@@ -54,8 +53,7 @@ class TournamentData extends Equatable {
   String get when => dateRange(startDate, endDate);
 
   @override
-  List<Object?> get props =>
-      [
+  List<Object?> get props => [
         id,
         name,
         address,
@@ -70,19 +68,21 @@ class TournamentData extends Equatable {
 typedef PlayerId = int;
 
 class PlayerData extends Equatable implements Comparable<PlayerData> {
+  const PlayerData(this.id, this.name);
+
+  factory PlayerData.fromJson(Map<String, dynamic> data) => PlayerData(
+        data['id'] as PlayerId,
+        data['name'] as String,
+      );
+
   final PlayerId id;
   final String name;
-
-  PlayerData(Map<String, dynamic> playerMap)
-      : id = playerMap['id'],
-        name = playerMap['name'];
 
   @override
   int compareTo(PlayerData other) => name.compareTo(other.name);
 
   @override
-  List<Object?> get props =>
-      [
+  List<Object?> get props => [
         id,
         name,
       ];
@@ -108,26 +108,24 @@ class ScheduleData extends Equatable {
 
   factory ScheduleData.fromJson(Map<String, dynamic> data) {
     final location = getLocation(data['timezone'] as String);
-    final roundScheduleList = data['rounds'];
-
-    List<RoundScheduleData> rounds = [];
-    for (final Map<String, dynamic> roundSchedule in roundScheduleList) {
-      RoundScheduleData newRound = RoundScheduleData.fromJson(
-        roundSchedule,
-        location,
-      );
-      rounds.add(newRound);
-    }
-
-    return ScheduleData(timezone: location, rounds: rounds);
+    final rounds = data['rounds'] as List;
+    return ScheduleData(
+      timezone: location,
+      rounds: [
+        for (final roundSchedule in rounds)
+          RoundScheduleData.fromJson(
+            roundSchedule,
+            location,
+          ),
+      ],
+    );
   }
 
   final Location timezone;
   final List<RoundScheduleData> rounds;
 
   @override
-  List<Object?> get props =>
-      [
+  List<Object?> get props => [
         timezone,
         rounds,
       ];
@@ -140,10 +138,12 @@ class RoundScheduleData extends Equatable {
     required this.start,
   });
 
-  factory RoundScheduleData.fromJson(Map<String, dynamic> data,
-      Location location,) =>
+  factory RoundScheduleData.fromJson(
+    Map<String, dynamic> data,
+    Location location,
+  ) =>
       RoundScheduleData(
-        id: data['id'] as RoundId,
+        id: data['id'].toString(),
         name: data['name'] as String,
         start: TZDateTime.from(
           DateTime.parse(data['start'] as String),
@@ -156,182 +156,181 @@ class RoundScheduleData extends Equatable {
   final DateTime start;
 
   @override
-  List<Object?> get props =>
-      [
+  List<Object?> get props => [
         name,
         start,
       ];
 }
 
-class ScoreData extends Equatable {
-  // one player's score
-  const ScoreData({
-    required this.id,
-    required this.rank,
-    required this.total,
-    required this.penalty,
-    required this.roundScores,
-  });
-
-  factory ScoreData.fromJson(int id, Map<String, dynamic> data) =>
-      ScoreData(
-        id: id,
-        rank: "${['', '='][data['t']]}${data['r']}",
-        total: data['total'] as int,
-        penalty: data['p'] as int,
-        roundScores: (data['s'] as List).cast(),
-      );
-
-  final PlayerId id;
-  final String rank;
-  final int total;
-  final int penalty;
-  final List<int> roundScores;
-
-  @override
-  List<Object?> get props =>
-      [
-        id,
-        rank,
-        total,
-        penalty,
-        roundScores,
-      ];
-}
-
-extension RoundDataList on List<RoundData> {
+class RoundTableData extends Equatable {
   // seating
-  Iterable<RoundData> withPlayerId(PlayerId? playerId) =>
-      playerId == null
-          ? this
-          : map((round) =>
-          RoundData(
-            id: round.id,
-            tables: {
-              for (final MapEntry(:key, :value) in round.tables.entries)
-                if (value.contains(playerId)) key: value,
-            },
-          ));
-}
-
-class RoundData extends Equatable {
-  // seating
-  const RoundData({
+  const RoundTableData({
     required this.id,
     required this.tables,
   });
 
-  factory RoundData.fromJson(Map<String, dynamic> data) =>
-      RoundData(
-        id: data['id'] as String,
+  factory RoundTableData.fromJson(Map<String, dynamic> data) => RoundTableData(
+        id: data['id'].toString(),
         tables: (data['tables'] as Map).map(
-              (key, value) =>
-              MapEntry(
-                key as String,
-                (value as List).cast(),
-              ),
+          (key, value) => MapEntry(
+            key as String,
+            (value as List).cast(),
+          ),
         ),
       );
 
-  final String id;
+  final RoundId id;
   final Map<String, List<PlayerId>> tables;
 
-  String tableNameForPlayerId(PlayerId playerId) =>
-      tables.entries
-          .firstWhere((e) => e.value.contains(playerId))
-          .key;
-
   @override
-  List<Object?> get props =>
-      [
+  List<Object?> get props => [
         id,
         tables,
       ];
 }
 
-extension HanchanList on List<GameData> {
-  // List of detailed results for a given player
-  List<Hanchan> withPlayerId(PlayerId playerId) {
-    List<Hanchan> out = [];
-    for (final GameData round in this) {
-      // get one game for each round for the given player
-      out.add(round.tables.values.firstWhere(
-              (Hanchan h) => h.playerIndex(playerId) > -1));
-    }
-    return out;
-  }
-}
-
-class HanchanScore {
+class HanchanScore extends Equatable {
   // detailed score for one player at one table in one round
-  late PlayerId playerId;
-  late int penalties;
-  late int gameScore;
-  late int placement;
-  late int finalScore;
-  late int rank;
-  late bool tied;
-  late int uma;
+  const HanchanScore({
+    required this.playerId,
+    required this.placement,
+    required this.finalScore,
+    required this.gameScore,
+    required this.penalties,
+  });
 
-  HanchanScore(List<int> initScores) {
-    playerId = initScores[0];
-    penalties = initScores[1];
-    gameScore = initScores[2];
-    placement = initScores[3];
-    finalScore = initScores[4];
-    uma = finalScore - gameScore - penalties;
-  }
+  factory HanchanScore.fromList(List<dynamic> data) => HanchanScore(
+        playerId: data[0] as int,
+        penalties: data[1] as int,
+        gameScore: data[2] as int,
+        placement: data[3] as int,
+        finalScore: data[4] as int,
+      );
+
+  final PlayerId playerId;
+  final int placement;
+  final int finalScore;
+  final int gameScore;
+  final int penalties;
+  int get uma => finalScore - gameScore - penalties;
+
+  @override
+  List<Object?> get props => [
+        playerId,
+        placement,
+        finalScore,
+        gameScore,
+        penalties,
+      ];
 }
 
-class Hanchan {
+class Hanchan extends Equatable {
   // the scores for all four players at one table in one round
-  final RoundId roundId;
-  final int tableId;
-  late Map<PlayerId, int> _players;
-  late List<HanchanScore> scores; // length 4: one HanchanScore for each player
-
-  Hanchan({
-    required this.roundId,
+  const Hanchan({
     required this.tableId,
-    required initScores,
-  }) {
-    _players = {};
-    scores = [];
-    int i = 0;
-    for (List score in initScores) {
-      HanchanScore player = HanchanScore(score.cast<int>());
-      scores.add(player);
-      _players[player.playerId] = i;
-      i++;
-    }
-  }
+    required this.scores,
+  });
 
-  int playerIndex(PlayerId pid) {
-    // the ?? -1 is unnecessary, but the linter doesn't realise that
-    return _players.containsKey(pid) ? (_players[pid] ?? -1) : -1;
-  }
+  final int tableId;
+  // length 4 - one HanchanScore for each player
+  final List<HanchanScore> scores;
+
+  @override
+  List<Object?> get props => [
+        tableId,
+        scores,
+      ];
 }
 
-class GameData { // detailed scores for all hanchans in a round
-
-  GameData({
-    required this.roundId,
+class RoundGameData extends Equatable {
+  // detailed scores for all hanchans in a round
+  const RoundGameData({
+    required this.roundIndex,
     required this.tables,
   });
 
-  final RoundId roundId;
-  final Map<String, Hanchan> tables;
+  final int roundIndex;
+  final List<Hanchan> tables;
 
-  factory GameData.fromJson(Map<String, dynamic> data) => GameData(
-        roundId: data['roundIndex'].toString(),
-        tables: (data['games'] as Map).map(
-          (tableId, scoresList) => MapEntry(
-              tableId.toString(),
-              Hanchan(
-                roundId: data['roundIndex'].toString(),
-                tableId: int.parse(tableId),
-                initScores: scoresList.cast(),
-              )),
-        ),
+  factory RoundGameData.fromJson(Map<String, dynamic> data) => RoundGameData(
+        roundIndex: data['roundIndex'] as int,
+        tables: [
+          for (final MapEntry(key: tableId, value: scoresList)
+              in (data['games'] as Map).entries)
+            Hanchan(
+              tableId: int.parse(tableId),
+              scores: [
+                for (final scores in (scoresList as List))
+                  HanchanScore.fromList((scores as List).cast())
+              ],
+            ),
+        ],
       );
+
+  @override
+  List<Object?> get props => [
+        roundIndex,
+        tables,
+      ];
+}
+
+class ScoresData extends Equatable {
+  const ScoresData({
+    required this.roundDone,
+    required this.scores,
+  });
+
+  factory ScoresData.fromJson(Map<String, dynamic> data) => ScoresData(
+        roundDone: data['roundsDone'] as int,
+        scores: {
+          for (final MapEntry(:key, :value) in (data as Map).entries)
+            key: PlayerScoreData.fromJson(value),
+        },
+      );
+
+  final int roundDone;
+  final Map<RoundId, PlayerScoreData> scores;
+
+  @override
+  List<Object?> get props => [
+        roundDone,
+        scores,
+      ];
+}
+
+class PlayerScoreData extends Equatable {
+  const PlayerScoreData({
+    required this.id,
+    required this.total,
+    required this.penalties,
+    required this.scores,
+    required this.rank,
+    required this.tied,
+  });
+
+  factory PlayerScoreData.fromJson(Map<String, dynamic> data) {
+    return PlayerScoreData(
+      id: data['id'] as PlayerId,
+      total: data['total'],
+      penalties: data['p'] as int,
+      scores: (data['s'] as List).cast(),
+      rank: data['r'] as int,
+      tied: (data['t'] as int) == 1,
+    );
+  }
+
+  final PlayerId id;
+  final int total;
+  final int penalties;
+  final List<int> scores;
+  final int rank;
+  final bool tied;
+
+  @override
+  List<Object?> get props => [
+        penalties,
+        scores,
+        rank,
+        tied,
+      ];
 }

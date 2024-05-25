@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '/providers.dart';
 import '/utils.dart';
+import 'async_error.dart';
+import 'async_loading.dart';
 
 class TournamentListPage extends StatelessWidget {
   const TournamentListPage({super.key});
@@ -27,8 +29,8 @@ class TournamentList extends ConsumerWidget {
     final tournamentList = ref.watch(tournamentListProvider);
     return tournamentList.when(
       skipLoadingOnReload: true,
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stackTrace) => ErrorScreen(error: error, stackTrace: stackTrace),
+      loading: () => const AsyncLoadingWidget(),
+      error: (error, stackTrace) => AsyncErrorWidget(error, stackTrace),
       data: (tournamentList) {
         if (tournamentList.isEmpty) {
           return const Center(child: Text('No Tournaments Found'));

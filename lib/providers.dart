@@ -12,30 +12,26 @@ export 'providers/shared_preferences.dart';
 
 final alarmScheduleProvider = StreamProvider((ref) async* {
   final location = await ref.watch(locationProvider.future);
-  final seating = await ref.watch(seatingProvider.future);
-  final scheduleRounds = await ref.watch(
-    scheduleProvider.selectAsync((schedule) {
-      return {
-        for (final round in schedule.rounds) round.id: round,
-      };
-    }),
-  );
+  final roundTableMap = await ref.watch(roundTableMapProvider.future);
+  final roundList = await ref.watch(roundScheduleListProvider.future);
   final selectedPlayer = ref.watch(selectedPlayerProvider);
 
-  yield seating.map((round) {
-    final roundSchedule = scheduleRounds[round.id]!;
+  yield roundList.map((round) {
+    final tables = roundTableMap[round.id]!;
     return (
       id: round.id,
-      name: roundSchedule.name,
+      name: round.name,
       alarm: TZDateTime.from(
-        roundSchedule.start,
+        round.start,
         location,
       ).subtract(const Duration(minutes: 5)),
       player: selectedPlayer != null
           ? (
               id: selectedPlayer.id,
               name: selectedPlayer.name,
-              table: round.tableNameForPlayerId(selectedPlayer.id),
+              table: tables.entries
+                  .firstWhere((e) => e.value.contains(selectedPlayer.id))
+                  .key,
             )
           : null,
     );

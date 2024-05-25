@@ -16,7 +16,7 @@ import 'models.dart';
 import 'providers.dart';
 import 'utils.dart';
 import 'views/alarm_page.dart';
-import 'views/player_page.dart';
+import 'views/player_page/page.dart';
 import 'views/settings_page.dart';
 import 'views/tournament_list_page.dart';
 import 'views/tournament_page/page.dart';
